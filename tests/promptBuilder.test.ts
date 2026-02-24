@@ -14,27 +14,20 @@ describe("promptBuilder", () => {
     expect(prompt.user).toContain("Stijl preset: EN -> NL");
     expect(prompt.user).toContain("Maak de tekst compacter");
     expect(prompt.user).toContain("Vertaal van Engels naar Nederlands");
-    expect(prompt.user).toContain("Tekst:\nHallo wereld");
+    expect(prompt.user).toContain("Gebruikersinput:\nHallo wereld");
   });
 
-  it("parses inline prompt between double asterisks", () => {
-    const prompt = buildRewritePrompt("**dit is een tekst naar de CEO** Joww, kunnen we straks effe samenzitten", DEFAULT_SETTINGS);
+  it("interprets full context without special marker syntax", () => {
+    const prompt = buildRewritePrompt("maak hier een actieplan van: website online zetten tegen vrijdag", DEFAULT_SETTINGS);
 
-    expect(prompt.user).toContain("Extra gebruikerscontext: dit is een tekst naar de CEO");
-    expect(prompt.user).toContain("Tekst:\nJoww, kunnen we straks effe samenzitten");
+    expect(prompt.user).toContain("Interpreteer de volledige gebruikersinput als context en inhoud");
+    expect(prompt.user).toContain("Gebruikersinput:\nmaak hier een actieplan van: website online zetten tegen vrijdag");
   });
 
-  it("parses inline prompt between single asterisks", () => {
-    const prompt = buildRewritePrompt("*vriendelijke WhatsApp naar klant* Hoi, je hebt nog niet betaald", DEFAULT_SETTINGS);
+  it("keeps asterisk text as plain input", () => {
+    const prompt = buildRewritePrompt("**dit is geen verplichte syntax meer** improve: deze zin", DEFAULT_SETTINGS);
 
-    expect(prompt.user).toContain("Extra gebruikerscontext: vriendelijke WhatsApp naar klant");
-    expect(prompt.user).toContain("Tekst:\nHoi, je hebt nog niet betaald");
-  });
-
-  it("keeps text unchanged when marker contains only prompt", () => {
-    const prompt = buildRewritePrompt("**alleen prompt zonder tekst**", DEFAULT_SETTINGS);
-    expect(prompt.user).toContain("Tekst:\n**alleen prompt zonder tekst**");
-    expect(prompt.user).not.toContain("Extra gebruikerscontext:");
+    expect(prompt.user).toContain("Gebruikersinput:\n**dit is geen verplichte syntax meer** improve: deze zin");
   });
 
   it("sanitizes wrapped quotes and markdown fences", () => {

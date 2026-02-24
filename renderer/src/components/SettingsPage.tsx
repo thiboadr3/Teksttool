@@ -635,7 +635,9 @@ export default function SettingsPage() {
 
       <section className="card">
         <h2>Rewrite style</h2>
-        <p className="small-note">Tip: start je selectie met <code>**jouw context**</code> gevolgd door je tekst. Voorbeeld: <code>**dit is een tekst naar de CEO** Joww, kunnen we straks effe samenzitten</code>.</p>
+        <p className="small-note">
+          Tip: schrijf je opdracht gewoon in dezelfde selectie, bv. <code>kijk na op spelling: jow, kanne we strax samenzitte</code> of <code>maak hier een actieplan van: website live vrijdag</code>.
+        </p>
         <label className="field">
           <span>Style preset</span>
           <select

@@ -6,45 +6,15 @@ export interface PromptBuildResult {
   user: string;
 }
 
-interface ParsedInlinePrompt {
-  inlinePrompt: string | null;
-  textToRewrite: string;
-}
-
-function parseInlinePrompt(inputText: string): ParsedInlinePrompt {
-  const normalized = inputText.trim();
-
-  const match = normalized.match(/^(?:\*\*([\s\S]+?)\*\*|\*([^\n*][\s\S]*?)\*)\s*([\s\S]*)$/);
-  if (!match) {
-    return {
-      inlinePrompt: null,
-      textToRewrite: normalized
-    };
-  }
-
-  const promptCandidate = (match[1] ?? match[2] ?? "").trim();
-  const textCandidate = (match[3] ?? "").trim();
-
-  if (!promptCandidate || !textCandidate) {
-    return {
-      inlinePrompt: null,
-      textToRewrite: normalized
-    };
-  }
-
-  return {
-    inlinePrompt: promptCandidate,
-    textToRewrite: textCandidate
-  };
-}
-
 function buildToggleInstructions(settings: RewriteSettings): string[] {
   const instructions: string[] = [];
 
   instructions.push(`Stijl preset: ${PRESET_LABELS[settings.stylePreset]}.`);
 
   if (settings.preserveMeaning) {
-    instructions.push("Behoud exact de betekenis en intentie.");
+    instructions.push(
+      "Behoud de kernboodschap en intentie, behalve wanneer de gebruiker expliciet om een andere outputvorm vraagt."
+    );
   }
   if (settings.fixSpellingGrammar) {
     instructions.push("Corrigeer spelling en grammatica.");
@@ -64,21 +34,20 @@ function buildToggleInstructions(settings: RewriteSettings): string[] {
   }
 
   instructions.push("Output: alleen platte tekst.");
+  instructions.push(
+    "Interpreteer de volledige gebruikersinput als context en inhoud. De gebruiker kan directe opdrachten geven zoals 'improve:', 'kijk na op spelling:', 'maak hier een actieplan van:' of gelijkaardige instructies."
+  );
+  instructions.push(
+    "Voer expliciete instructies uit op de meegegeven inhoud. Als geen expliciete instructie aanwezig is, verbeter de tekst volgens de ingestelde stijl en toggles."
+  );
 
   return instructions;
 }
 
 export function buildRewritePrompt(inputText: string, settings: RewriteSettings): PromptBuildResult {
-  const { inlinePrompt, textToRewrite } = parseInlinePrompt(inputText);
+  const textToRewrite = inputText.trim();
   const instructions = buildToggleInstructions(settings);
-
-  if (inlinePrompt) {
-    instructions.push(
-      `Extra gebruikerscontext: ${inlinePrompt}. Pas toon en register hierop aan zonder de boodschap te veranderen.`
-    );
-  }
-
-  const user = `${instructions.join(" ")}\n\nTekst:\n${textToRewrite}`;
+  const user = `${instructions.join(" ")}\n\nGebruikersinput:\n${textToRewrite}`;
 
   return {
     system: SYSTEM_PROMPT,
