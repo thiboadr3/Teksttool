@@ -22,7 +22,7 @@ export const PRESET_LABELS: Record<StylePreset, string> = {
 export const DEFAULT_SETTINGS: RewriteSettings = {
   shortcut: HOTKEY_PRIMARY,
   stylePreset: "professioneel",
-  autoPaste: false,
+  autoPaste: true,
   preserveMeaning: true,
   fixSpellingGrammar: true,
   makeConcise: false,

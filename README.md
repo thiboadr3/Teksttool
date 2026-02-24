@@ -9,7 +9,7 @@ Cross-platform desktop app (Electron + React + TypeScript) die geselecteerde tek
 - Default Windows/Linux: `Ctrl + Alt + R`
 - Default macOS: `Cmd + Ctrl + R`
 - Fallback bij conflict: `Ctrl/Cmd + Shift + R`
-- Copy -> clipboard read (200ms, retry max 2x) -> OpenAI rewrite -> clipboard write -> paste/preview
+- Copy -> clipboard read (200ms, retry max 2x) -> OpenAI rewrite -> clipboard write -> direct paste
 - Tray app met menu:
 - `Rewrite now`
 - `Settings...`
@@ -21,9 +21,6 @@ Cross-platform desktop app (Electron + React + TypeScript) die geselecteerde tek
 - API key via OS keychain (`keytar`)
 - Test API knop
 - Debug mode (lokale request/response zichtbaarheid)
-- Preview popup wanneer Auto-paste uitstaat:
-- Tabs `Original` / `Improved`
-- `Copy improved`, `Paste`, `Cancel`
 - Usage & costs (Settings):
 - Totaal requests, input/output tokens
 - Totale geschatte EUR kost
@@ -46,7 +43,7 @@ Cross-platform desktop app (Electron + React + TypeScript) die geselecteerde tek
 ## Projectstructuur
 
 - `main/` Electron main process (tray, hotkey, clipboard flow, IPC, OpenAI, settings)
-- `renderer/` React UI (settings + preview)
+- `renderer/` React UI (settings)
 - `shared/` gedeelde types/constants/prompt builder
 - `tests/` unit tests (OpenAI call, prompt builder, settings persistence)
 

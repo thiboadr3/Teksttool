@@ -457,7 +457,7 @@ export default function SettingsPage() {
         <section className="card hint-card">
           <h2>Quick start</h2>
           <p>
-            1) Plak je OpenAI API key. 2) Klik Save. 3) Selecteer tekst in eender welke app en druk {activeHotkeyLabel}.
+            1) Plak je OpenAI API key. 2) Klik Save. 3) Selecteer tekst in eender welke app en druk {activeHotkeyLabel}. De tekst wordt meteen vervangen.
           </p>
         </section>
       )}
@@ -556,11 +556,6 @@ export default function SettingsPage() {
           </select>
         </label>
 
-        <ToggleRow
-          label="Auto-paste"
-          value={settings.autoPaste}
-          onChange={(value) => setSettings((prev) => ({ ...prev, autoPaste: value }))}
-        />
         <ToggleRow
           label="Preserve meaning"
           value={settings.preserveMeaning}

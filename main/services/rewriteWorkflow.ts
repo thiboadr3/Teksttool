@@ -1,5 +1,5 @@
 import { clipboard } from "electron";
-import type { RewriteDebugPayload, RewriteRunContext, RewriteSettings, TokenUsage } from "../../shared/types";
+import type { RewriteDebugPayload, RewriteSettings, TokenUsage } from "../../shared/types";
 import { OpenAIService } from "./openaiService";
 import { logError, logInfo, logTiming } from "./logger";
 import { simulateCopyShortcut, simulatePasteShortcut } from "./keyboardAutomation";
@@ -27,7 +27,6 @@ interface RewriteWorkflowDeps {
   getApiKey: () => Promise<string | null>;
   openAiService: OpenAIService;
   onStatus: (level: "info" | "success" | "error", message: string) => void;
-  onPreviewRequested: (context: RewriteRunContext) => void;
   onDebugUpdate: (payload: RewriteDebugPayload) => void;
   onUsageRecorded: (model: string, usage: TokenUsage) => void;
 }
@@ -67,18 +66,9 @@ export class RewriteWorkflow {
         this.deps.onDebugUpdate(rewritten.debug);
       }
 
-      if (settings.autoPaste) {
-        await simulatePasteShortcut();
-        this.deps.onStatus("success", "Tekst herschreven en geplakt.");
-        logInfo("Rewrite complete", { sourceLength: sourceText.length, outputLength: rewritten.text.length });
-      } else {
-        this.deps.onPreviewRequested({
-          sourceText,
-          improvedText: rewritten.text,
-          previousClipboardText
-        });
-        this.deps.onStatus("info", "Rewrite klaar in preview.");
-      }
+      await simulatePasteShortcut();
+      this.deps.onStatus("success", "Tekst herschreven en geplakt.");
+      logInfo("Rewrite complete", { sourceLength: sourceText.length, outputLength: rewritten.text.length });
 
       logTiming("workflow.total", workflowStart);
     } catch (error) {

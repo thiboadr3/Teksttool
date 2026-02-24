@@ -284,7 +284,6 @@ const rewriteWorkflow = new RewriteWorkflow({
   getApiKey,
   openAiService,
   onStatus: publishStatus,
-  onPreviewRequested: showPreviewWindow,
   onDebugUpdate: publishDebug,
   onUsageRecorded: (model, usage) => {
     const snapshot = costService.recordUsage("rewrite", model, usage);
