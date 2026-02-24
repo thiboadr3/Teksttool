@@ -70,6 +70,16 @@ export interface AuthResult {
   message: string;
 }
 
+export interface UpdateCheckResult {
+  ok: boolean;
+  message: string;
+  currentVersion: string;
+  latestVersion?: string;
+  hasUpdate?: boolean;
+  releaseUrl?: string;
+  downloadUrl?: string;
+}
+
 export interface RewriteRunContext {
   sourceText: string;
   improvedText: string;

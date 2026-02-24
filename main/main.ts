@@ -10,7 +10,8 @@ import {
   globalShortcut,
   ipcMain,
   nativeImage,
-  screen
+  screen,
+  shell
 } from "electron";
 import {
   APP_NAME,
@@ -28,7 +29,8 @@ import type {
   RewriteRunContext,
   RewriteSettings,
   SettingsPayload,
-  TestApiResult
+  TestApiResult,
+  UpdateCheckResult
 } from "../shared/types";
 import { createCostService } from "./services/costService";
 import { getApiKey, setApiKey } from "./services/keychainService";
@@ -46,6 +48,9 @@ const __dirname = path.dirname(__filename);
 
 const preloadPath = path.join(__dirname, "preload.js");
 const rendererHtmlPath = path.join(__dirname, "../dist-renderer/index.html");
+const GITHUB_REPO = "thiboadr3/Teksttool";
+const RELEASES_LATEST_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+const RELEASES_PAGE_URL = `https://github.com/${GITHUB_REPO}/releases`;
 
 let tray: Tray | null = null;
 let settingsWindow: BrowserWindow | null = null;
@@ -59,6 +64,17 @@ const settingsService = createSettingsService();
 const costService = createCostService();
 const openAiService = new OpenAIService();
 const authService = new AuthService();
+
+interface GithubReleaseAsset {
+  name: string;
+  browser_download_url: string;
+}
+
+interface GithubReleasePayload {
+  tag_name: string;
+  html_url: string;
+  assets: GithubReleaseAsset[];
+}
 
 function isDevMode(): boolean {
   return Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -158,6 +174,149 @@ function normalizeAuthPayload(payload: unknown): AuthPayload {
     email: typeof candidate.email === "string" ? candidate.email : "",
     password: typeof candidate.password === "string" ? candidate.password : ""
   };
+}
+
+function normalizeVersion(input: string): string {
+  return input.trim().replace(/^v/i, "");
+}
+
+function parseVersion(input: string): number[] {
+  return normalizeVersion(input)
+    .split(".")
+    .map((part) => Number.parseInt(part, 10))
+    .map((value) => (Number.isFinite(value) ? value : 0));
+}
+
+function compareVersions(a: string, b: string): number {
+  const aParts = parseVersion(a);
+  const bParts = parseVersion(b);
+  const length = Math.max(aParts.length, bParts.length);
+
+  for (let i = 0; i < length; i += 1) {
+    const aPart = aParts[i] ?? 0;
+    const bPart = bParts[i] ?? 0;
+
+    if (aPart > bPart) {
+      return 1;
+    }
+
+    if (aPart < bPart) {
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
+function getPreferredUpdateAsset(assets: GithubReleaseAsset[]): GithubReleaseAsset | null {
+  if (assets.length === 0) {
+    return null;
+  }
+
+  if (process.platform === "darwin") {
+    const withArch = assets.find(
+      (asset) =>
+        asset.name.endsWith(".zip") &&
+        asset.name.toLowerCase().includes("mac") &&
+        asset.name.toLowerCase().includes(process.arch)
+    );
+    if (withArch) {
+      return withArch;
+    }
+
+    const macZip = assets.find((asset) => asset.name.endsWith(".zip") && asset.name.toLowerCase().includes("mac"));
+    if (macZip) {
+      return macZip;
+    }
+  }
+
+  if (process.platform === "win32") {
+    const setupExe = assets.find((asset) => asset.name.endsWith(".exe") && !asset.name.endsWith(".exe.blockmap"));
+    if (setupExe) {
+      return setupExe;
+    }
+  }
+
+  if (process.platform === "linux") {
+    const appImage = assets.find((asset) => asset.name.endsWith(".AppImage"));
+    if (appImage) {
+      return appImage;
+    }
+  }
+
+  return assets[0] ?? null;
+}
+
+function getSafeExternalUrl(input: unknown): string {
+  if (typeof input !== "string" || input.trim().length === 0) {
+    return RELEASES_PAGE_URL;
+  }
+
+  try {
+    const parsed = new URL(input);
+    if (parsed.protocol !== "https:") {
+      return RELEASES_PAGE_URL;
+    }
+
+    return parsed.toString();
+  } catch {
+    return RELEASES_PAGE_URL;
+  }
+}
+
+async function checkForUpdates(): Promise<UpdateCheckResult> {
+  const currentVersion = app.getVersion();
+
+  try {
+    const response = await fetch(RELEASES_LATEST_API_URL, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        "User-Agent": APP_NAME
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error(`Update check failed (${response.status}).`);
+    }
+
+    const payload = (await response.json()) as GithubReleasePayload;
+    const latestVersion = normalizeVersion(payload.tag_name);
+    if (!latestVersion) {
+      throw new Error("Kon de laatste releaseversie niet bepalen.");
+    }
+
+    const hasUpdate = compareVersions(latestVersion, currentVersion) > 0;
+    const preferredAsset = getPreferredUpdateAsset(payload.assets ?? []);
+
+    if (!hasUpdate) {
+      return {
+        ok: true,
+        message: "Je zit op de laatste versie.",
+        currentVersion,
+        latestVersion,
+        hasUpdate: false,
+        releaseUrl: payload.html_url || RELEASES_PAGE_URL
+      };
+    }
+
+    return {
+      ok: true,
+      message: `Update beschikbaar: v${latestVersion}`,
+      currentVersion,
+      latestVersion,
+      hasUpdate: true,
+      releaseUrl: payload.html_url || RELEASES_PAGE_URL,
+      downloadUrl: preferredAsset?.browser_download_url || payload.html_url || RELEASES_PAGE_URL
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Updatecheck mislukt.";
+    logError("Update check failed", error);
+    return {
+      ok: false,
+      message,
+      currentVersion
+    };
+  }
 }
 
 function tryRegisterHotkey(accelerator: string): boolean {
@@ -374,6 +533,15 @@ function registerIpcHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.logout, (): { ok: boolean } => {
     authService.logout();
     publishStatus("info", "Uitgelogd.");
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.checkForUpdates, async (): Promise<UpdateCheckResult> => {
+    return checkForUpdates();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.openUpdateDownload, async (_event, url?: string): Promise<{ ok: boolean }> => {
+    await shell.openExternal(getSafeExternalUrl(url));
     return { ok: true };
   });
 

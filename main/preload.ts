@@ -8,7 +8,8 @@ import type {
   RewriteDebugPayload,
   RewriteRunContext,
   SettingsPayload,
-  TestApiResult
+  TestApiResult,
+  UpdateCheckResult
 } from "../shared/types";
 import type { RewriteSettings } from "../shared/types";
 import type { RewriteStatusMessage } from "../shared/ipc";
@@ -24,6 +25,8 @@ const desktopApi = {
   registerAuth: (payload: AuthPayload): Promise<AuthResult> => ipcRenderer.invoke(IPC_CHANNELS.registerAuth, payload),
   login: (payload: AuthPayload): Promise<AuthResult> => ipcRenderer.invoke(IPC_CHANNELS.login, payload),
   logout: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC_CHANNELS.logout),
+  checkForUpdates: (): Promise<UpdateCheckResult> => ipcRenderer.invoke(IPC_CHANNELS.checkForUpdates),
+  openUpdateDownload: (url?: string): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC_CHANNELS.openUpdateDownload, url),
   getSettings: (): Promise<RendererSettingsState> => ipcRenderer.invoke(IPC_CHANNELS.getSettings),
   getCostStats: (): Promise<CostSnapshot> => ipcRenderer.invoke(IPC_CHANNELS.getCostStats),
   saveSettings: (payload: SettingsPayload): Promise<{ ok: boolean }> =>

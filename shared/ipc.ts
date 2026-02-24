@@ -3,6 +3,8 @@ export const IPC_CHANNELS = {
   registerAuth: "auth:register",
   login: "auth:login",
   logout: "auth:logout",
+  checkForUpdates: "update:check",
+  openUpdateDownload: "update:open-download",
   getSettings: "settings:get",
   saveSettings: "settings:save",
   testApi: "openai:test",

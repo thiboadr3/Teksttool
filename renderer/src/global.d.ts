@@ -6,7 +6,8 @@ import type {
   RewriteDebugPayload,
   RewriteRunContext,
   SettingsPayload,
-  TestApiResult
+  TestApiResult,
+  UpdateCheckResult
 } from "../../shared/types";
 import type { RewriteStatusMessage } from "../../shared/ipc";
 
@@ -32,6 +33,8 @@ interface DesktopApi {
   registerAuth: (payload: AuthPayload) => Promise<AuthResult>;
   login: (payload: AuthPayload) => Promise<AuthResult>;
   logout: () => Promise<{ ok: boolean }>;
+  checkForUpdates: () => Promise<UpdateCheckResult>;
+  openUpdateDownload: (url?: string) => Promise<{ ok: boolean }>;
   getSettings: () => Promise<RendererSettingsState>;
   getCostStats: () => Promise<CostSnapshot>;
   saveSettings: (payload: SettingsPayload) => Promise<{ ok: boolean }>;

@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DEFAULT_SETTINGS, PRESET_LABELS } from "../../../shared/constants";
-import type { AuthState, CostSnapshot, RewriteDebugPayload, RewriteSettings, SettingsPayload } from "../../../shared/types";
+import type {
+  AuthState,
+  CostSnapshot,
+  RewriteDebugPayload,
+  RewriteSettings,
+  SettingsPayload,
+  UpdateCheckResult
+} from "../../../shared/types";
 import type { RewriteStatusMessage } from "../../../shared/ipc";
 import ToastStack, { type ToastItem } from "./ToastStack";
 
@@ -120,6 +127,8 @@ export default function SettingsPage() {
   const [testing, setTesting] = useState(false);
   const [debugPayload, setDebugPayload] = useState<RewriteDebugPayload | null>(null);
   const [costStats, setCostStats] = useState<CostSnapshot>(DEFAULT_COST_SNAPSHOT);
+  const [updateState, setUpdateState] = useState<UpdateCheckResult | null>(null);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
   const desktopApiAvailable = typeof window.desktopApi !== "undefined";
@@ -132,6 +141,32 @@ export default function SettingsPage() {
   const removeToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
+
+  const refreshUpdateState = useCallback(
+    async (showToast: boolean) => {
+      if (!desktopApiAvailable) {
+        return;
+      }
+
+      setCheckingUpdates(true);
+      try {
+        const result = await window.desktopApi.checkForUpdates();
+        setUpdateState(result);
+
+        if (showToast) {
+          addToast(result.ok ? (result.hasUpdate ? "info" : "success") : "error", result.message);
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Updatecheck mislukt.";
+        if (showToast) {
+          addToast("error", message);
+        }
+      } finally {
+        setCheckingUpdates(false);
+      }
+    },
+    [addToast, desktopApiAvailable]
+  );
 
   const loadProtectedData = useCallback(async () => {
     const [state, snapshot] = await Promise.all([
@@ -180,6 +215,7 @@ export default function SettingsPage() {
 
     void (async () => {
       try {
+        void refreshUpdateState(false);
         const auth = await window.desktopApi.getAuthState();
         setAuthState(auth);
         setAuthEmail(auth.email ?? "");
@@ -205,7 +241,7 @@ export default function SettingsPage() {
       unsubscribeDebug();
       unsubscribeCost();
     };
-  }, [addToast, desktopApiAvailable, loadProtectedData]);
+  }, [addToast, desktopApiAvailable, loadProtectedData, refreshUpdateState]);
 
   const canTestApi = useMemo(() => Boolean(apiKey.trim()) || apiKeyConfigured, [apiKey, apiKeyConfigured]);
 
@@ -351,6 +387,20 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleOpenUpdateDownload(): Promise<void> {
+    if (!desktopApiAvailable) {
+      addToast("error", "Desktop API niet beschikbaar");
+      return;
+    }
+
+    try {
+      await window.desktopApi.openUpdateDownload(updateState?.downloadUrl || updateState?.releaseUrl);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Kon updatepagina niet openen.";
+      addToast("error", message);
+    }
+  }
+
   if (loading) {
     return <div className="page loading">Loading...</div>;
   }
@@ -424,6 +474,29 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        <section className="card">
+          <h2>Updates</h2>
+          <div className="row">
+            <span>Huidige versie</span>
+            <strong>{updateState?.currentVersion ?? "-"}</strong>
+          </div>
+          <div className="row">
+            <span>Laatste versie</span>
+            <strong>{updateState?.latestVersion ?? "Onbekend"}</strong>
+          </div>
+          <p className="small-note">{updateState?.message ?? "Nog geen updatecheck uitgevoerd."}</p>
+          <div className="actions">
+            <button className="btn secondary" type="button" disabled={checkingUpdates} onClick={() => void refreshUpdateState(true)}>
+              {checkingUpdates ? "Controleren..." : "Check updates"}
+            </button>
+            {updateState?.hasUpdate && (
+              <button className="btn primary" type="button" onClick={() => void handleOpenUpdateDownload()}>
+                Download update
+              </button>
+            )}
+          </div>
+        </section>
+
         <footer className="footer">
           <div className="status">{statusLabel}</div>
         </footer>
@@ -450,6 +523,29 @@ export default function SettingsPage() {
           <button className="btn secondary" type="button" onClick={() => void handleLogout()}>
             Uitloggen
           </button>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Updates</h2>
+        <div className="row">
+          <span>Huidige versie</span>
+          <strong>{updateState?.currentVersion ?? "-"}</strong>
+        </div>
+        <div className="row">
+          <span>Laatste versie</span>
+          <strong>{updateState?.latestVersion ?? "Onbekend"}</strong>
+        </div>
+        <p className="small-note">{updateState?.message ?? "Nog geen updatecheck uitgevoerd."}</p>
+        <div className="actions">
+          <button className="btn secondary" type="button" disabled={checkingUpdates} onClick={() => void refreshUpdateState(true)}>
+            {checkingUpdates ? "Controleren..." : "Check updates"}
+          </button>
+          {updateState?.hasUpdate && (
+            <button className="btn primary" type="button" onClick={() => void handleOpenUpdateDownload()}>
+              Download update
+            </button>
+          )}
         </div>
       </section>
 

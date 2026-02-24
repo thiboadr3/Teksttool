@@ -21,6 +21,7 @@ Cross-platform desktop app (Electron + React + TypeScript) die geselecteerde tek
 - API key via OS keychain (`keytar`)
 - Test API knop
 - Debug mode (lokale request/response zichtbaarheid)
+- Update check + downloadknop (GitHub Releases)
 - Usage & costs (Settings):
 - Totaal requests, input/output tokens
 - Totale geschatte EUR kost
@@ -171,10 +172,18 @@ De key is dan meestal geldig, maar het OpenAI project heeft geen actief quota/bi
 - De app toont `Geen tekst geselecteerd`.
 - Selecteer tekst in de actieve app en trigger opnieuw.
 
+### macOS meldt "app is beschadigd"
+
+Bij unsigned builds kan macOS/Gatekeeper dit tonen na download. Verwijder quarantine-attributen en open opnieuw:
+
+```bash
+xattr -dr com.apple.quarantine "/pad/naar/Tekstnakijken.app"
+open "/pad/naar/Tekstnakijken.app"
+```
+
 ## Belangrijke implementatiedetails
 
 - System prompt staat in `shared/constants.ts`.
 - Prompt opbouw in `shared/promptBuilder.ts`.
 - Output wordt opgeschoond naar plain text (quotes/backticks gestript).
 - Clipboard rollback gebeurt automatisch bij fouten.
-- Preview `Cancel` zet oude clipboard terug.
