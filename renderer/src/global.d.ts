@@ -1,4 +1,7 @@
 import type {
+  AuthPayload,
+  AuthResult,
+  AuthState,
   CostSnapshot,
   RewriteDebugPayload,
   RewriteRunContext,
@@ -25,6 +28,10 @@ interface RendererSettingsState {
 }
 
 interface DesktopApi {
+  getAuthState: () => Promise<AuthState>;
+  registerAuth: (payload: AuthPayload) => Promise<AuthResult>;
+  login: (payload: AuthPayload) => Promise<AuthResult>;
+  logout: () => Promise<{ ok: boolean }>;
   getSettings: () => Promise<RendererSettingsState>;
   getCostStats: () => Promise<CostSnapshot>;
   saveSettings: (payload: SettingsPayload) => Promise<{ ok: boolean }>;

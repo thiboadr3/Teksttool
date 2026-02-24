@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { DEFAULT_SETTINGS, PRESET_LABELS } from "../../../shared/constants";
-import type { CostSnapshot, RewriteDebugPayload, RewriteSettings, SettingsPayload } from "../../../shared/types";
+import type { AuthState, CostSnapshot, RewriteDebugPayload, RewriteSettings, SettingsPayload } from "../../../shared/types";
 import type { RewriteStatusMessage } from "../../../shared/ipc";
 import ToastStack, { type ToastItem } from "./ToastStack";
 
@@ -26,6 +26,12 @@ const DEFAULT_COST_SNAPSHOT: CostSnapshot = {
   totalEstimatedCostUsd: 0,
   lastRequest: null,
   pricingNote: "Schatting op basis van token usage en lokale model-pricing (kan afwijken van OpenAI billing)."
+};
+
+const DEFAULT_AUTH_STATE: AuthState = {
+  initialized: false,
+  authenticated: false,
+  email: null
 };
 
 function getShortcutOptions(): ShortcutOption[] {
@@ -99,6 +105,11 @@ function ToggleRow(props: {
 }
 
 export default function SettingsPage() {
+  const [authState, setAuthState] = useState<AuthState>(DEFAULT_AUTH_STATE);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authConfirmPassword, setAuthConfirmPassword] = useState("");
+  const [authBusy, setAuthBusy] = useState(false);
   const [settings, setSettings] = useState<RewriteSettings>(DEFAULT_SETTINGS);
   const [apiKey, setApiKey] = useState("");
   const [apiKeyConfigured, setApiKeyConfigured] = useState(false);
@@ -122,6 +133,32 @@ export default function SettingsPage() {
     setToasts((prev) => prev.filter((toast) => toast.id !== id));
   }, []);
 
+  const loadProtectedData = useCallback(async () => {
+    const [state, snapshot] = await Promise.all([
+      window.desktopApi.getSettings() as Promise<RendererSettingsState>,
+      window.desktopApi.getCostStats()
+    ]);
+
+    setSettings({
+      shortcut: state.shortcut,
+      stylePreset: state.stylePreset,
+      autoPaste: state.autoPaste,
+      preserveMeaning: state.preserveMeaning,
+      fixSpellingGrammar: state.fixSpellingGrammar,
+      makeConcise: state.makeConcise,
+      makePersuasive: state.makePersuasive,
+      model: state.model,
+      temperature: state.temperature,
+      advancedOpen: state.advancedOpen,
+      debugMode: state.debugMode
+    });
+    setApiKeyConfigured(state.apiKeyConfigured);
+    setActiveHotkeyLabel(state.activeHotkeyLabel);
+    setDebugPayload(state.lastDebug);
+    setCostStats(snapshot);
+    setStatusLabel(state.apiKeyConfigured ? "Saved" : "Voer API key in");
+  }, []);
+
   useEffect(() => {
     if (!desktopApiAvailable) {
       setLoading(false);
@@ -142,43 +179,33 @@ export default function SettingsPage() {
     });
 
     void (async () => {
-      const [state, snapshot] = await Promise.all([
-        window.desktopApi.getSettings() as Promise<RendererSettingsState>,
-        window.desktopApi.getCostStats()
-      ]);
+      try {
+        const auth = await window.desktopApi.getAuthState();
+        setAuthState(auth);
+        setAuthEmail(auth.email ?? "");
 
-      setSettings({
-        shortcut: state.shortcut,
-        stylePreset: state.stylePreset,
-        autoPaste: state.autoPaste,
-        preserveMeaning: state.preserveMeaning,
-        fixSpellingGrammar: state.fixSpellingGrammar,
-        makeConcise: state.makeConcise,
-        makePersuasive: state.makePersuasive,
-        model: state.model,
-        temperature: state.temperature,
-        advancedOpen: state.advancedOpen,
-        debugMode: state.debugMode
-      });
-      setApiKeyConfigured(state.apiKeyConfigured);
-      setActiveHotkeyLabel(state.activeHotkeyLabel);
-      setDebugPayload(state.lastDebug);
-      setCostStats(snapshot);
-      setStatusLabel(state.apiKeyConfigured ? "Saved" : "Voer API key in");
-      setLoading(false);
-    })().catch((error) => {
-      const message = error instanceof Error ? error.message : "Kon settings niet laden";
-      setStatusLabel("Load failed");
-      addToast("error", message);
-      setLoading(false);
-    });
+        if (!auth.authenticated) {
+          setStatusLabel(auth.initialized ? "Log in om verder te gaan" : "Maak eerst een account aan");
+          setLoading(false);
+          return;
+        }
+
+        await loadProtectedData();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Kon app data niet laden";
+        setStatusLabel("Load failed");
+        addToast("error", message);
+      } finally {
+        setLoading(false);
+      }
+    })();
 
     return () => {
       unsubscribeStatus();
       unsubscribeDebug();
       unsubscribeCost();
     };
-  }, [addToast, desktopApiAvailable]);
+  }, [addToast, desktopApiAvailable, loadProtectedData]);
 
   const canTestApi = useMemo(() => Boolean(apiKey.trim()) || apiKeyConfigured, [apiKey, apiKeyConfigured]);
 
@@ -246,6 +273,84 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleAuthenticate(): Promise<void> {
+    if (!desktopApiAvailable) {
+      addToast("error", "Desktop API niet beschikbaar");
+      return;
+    }
+
+    const normalizedEmail = authEmail.trim();
+    const normalizedPassword = authPassword.trim();
+
+    if (!normalizedEmail || !normalizedPassword) {
+      addToast("error", "E-mail en wachtwoord zijn verplicht.");
+      return;
+    }
+
+    if (!authState.initialized && normalizedPassword !== authConfirmPassword.trim()) {
+      addToast("error", "Wachtwoorden komen niet overeen.");
+      return;
+    }
+
+    setAuthBusy(true);
+    try {
+      const result = authState.initialized
+        ? await window.desktopApi.login({ email: normalizedEmail, password: normalizedPassword })
+        : await window.desktopApi.registerAuth({ email: normalizedEmail, password: normalizedPassword });
+
+      if (!result.ok) {
+        addToast("error", result.message);
+        return;
+      }
+
+      const nextAuthState: AuthState = {
+        initialized: true,
+        authenticated: true,
+        email: normalizedEmail.toLowerCase()
+      };
+
+      setAuthState(nextAuthState);
+      setAuthPassword("");
+      setAuthConfirmPassword("");
+      setLoading(true);
+      await loadProtectedData();
+      setStatusLabel("Ingelogd");
+      addToast("success", result.message);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Inloggen mislukt.";
+      addToast("error", message);
+    } finally {
+      setAuthBusy(false);
+      setLoading(false);
+    }
+  }
+
+  async function handleLogout(): Promise<void> {
+    if (!desktopApiAvailable) {
+      addToast("error", "Desktop API niet beschikbaar");
+      return;
+    }
+
+    try {
+      await window.desktopApi.logout();
+      setAuthState((prev) => ({
+        initialized: prev.initialized,
+        authenticated: false,
+        email: prev.email
+      }));
+      setApiKey("");
+      setApiKeyConfigured(false);
+      setDebugPayload(null);
+      setCostStats(DEFAULT_COST_SNAPSHOT);
+      setSettings(DEFAULT_SETTINGS);
+      setStatusLabel("Log in om verder te gaan");
+      addToast("success", "Uitgelogd");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Uitloggen mislukt";
+      addToast("error", message);
+    }
+  }
+
   if (loading) {
     return <div className="page loading">Loading...</div>;
   }
@@ -263,12 +368,90 @@ export default function SettingsPage() {
     );
   }
 
+  if (!authState.authenticated) {
+    return (
+      <main className="page">
+        <header className="header">
+          <h1>Tekstnakijken</h1>
+          <p>Beveiligde toegang</p>
+        </header>
+
+        <section className="card">
+          <h2>{authState.initialized ? "Log in" : "Account aanmaken"}</h2>
+          <p className="small-note">
+            Eerst inloggen verplicht. Zonder actieve sessie blijft de OpenAI key afgeschermd.
+          </p>
+
+          <label className="field">
+            <span>E-mail</span>
+            <input
+              type="email"
+              autoComplete="username"
+              value={authEmail}
+              onChange={(event) => setAuthEmail(event.target.value)}
+              placeholder="naam@bedrijf.com"
+            />
+          </label>
+
+          <label className="field">
+            <span>Wachtwoord</span>
+            <input
+              type="password"
+              autoComplete={authState.initialized ? "current-password" : "new-password"}
+              value={authPassword}
+              onChange={(event) => setAuthPassword(event.target.value)}
+              placeholder="Minstens 8 tekens"
+            />
+          </label>
+
+          {!authState.initialized && (
+            <label className="field">
+              <span>Bevestig wachtwoord</span>
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={authConfirmPassword}
+                onChange={(event) => setAuthConfirmPassword(event.target.value)}
+                placeholder="Herhaal wachtwoord"
+              />
+            </label>
+          )}
+
+          <div className="actions">
+            <button className="btn primary" type="button" disabled={authBusy} onClick={() => void handleAuthenticate()}>
+              {authBusy ? "Even wachten..." : authState.initialized ? "Log in" : "Account aanmaken"}
+            </button>
+          </div>
+        </section>
+
+        <footer className="footer">
+          <div className="status">{statusLabel}</div>
+        </footer>
+
+        <ToastStack toasts={toasts} onRemove={removeToast} />
+      </main>
+    );
+  }
+
   return (
     <main className="page">
       <header className="header">
         <h1>Tekstnakijken</h1>
         <p>Minimal productivity rewrite tool</p>
       </header>
+
+      <section className="card">
+        <h2>Sessie</h2>
+        <div className="row">
+          <span>Ingelogd als</span>
+          <strong>{authState.email ?? "-"}</strong>
+        </div>
+        <div className="actions">
+          <button className="btn secondary" type="button" onClick={() => void handleLogout()}>
+            Uitloggen
+          </button>
+        </div>
+      </section>
 
       {!apiKeyConfigured && (
         <section className="card hint-card">

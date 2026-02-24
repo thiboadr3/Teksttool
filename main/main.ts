@@ -20,6 +20,9 @@ import {
 } from "../shared/constants";
 import { IPC_CHANNELS, type RewriteStatusMessage } from "../shared/ipc";
 import type {
+  AuthPayload,
+  AuthResult,
+  AuthState,
   CostSnapshot,
   RewriteDebugPayload,
   RewriteRunContext,
@@ -32,6 +35,7 @@ import { getApiKey, setApiKey } from "./services/keychainService";
 import { logError, logInfo } from "./services/logger";
 import { OpenAIService } from "./services/openaiService";
 import { RewriteWorkflow } from "./services/rewriteWorkflow";
+import { AuthService } from "./services/authService";
 import { createSettingsService } from "./services/settingsService";
 import { simulatePasteShortcut } from "./services/keyboardAutomation";
 import { createPreviewWindow } from "./windows/previewWindow";
@@ -54,6 +58,7 @@ let quitting = false;
 const settingsService = createSettingsService();
 const costService = createCostService();
 const openAiService = new OpenAIService();
+const authService = new AuthService();
 
 function isDevMode(): boolean {
   return Boolean(process.env.VITE_DEV_SERVER_URL);
@@ -140,6 +145,19 @@ function getHotkeyCandidates(preferredShortcut: string): string[] {
   ];
 
   return [...new Set(pool)];
+}
+
+function normalizeAuthPayload(payload: unknown): AuthPayload {
+  if (!payload || typeof payload !== "object") {
+    return { email: "", password: "" };
+  }
+
+  const candidate = payload as Partial<AuthPayload>;
+
+  return {
+    email: typeof candidate.email === "string" ? candidate.email : "",
+    password: typeof candidate.password === "string" ? candidate.password : ""
+  };
 }
 
 function tryRegisterHotkey(accelerator: string): boolean {
@@ -252,6 +270,12 @@ function showPreviewWindow(context: RewriteRunContext): void {
 }
 
 async function triggerRewriteFlow(): Promise<void> {
+  if (!authService.isAuthenticated()) {
+    showSettingsWindow();
+    publishStatus("error", "Log eerst in om de tool te gebruiken.");
+    return;
+  }
+
   await rewriteWorkflow.run();
 }
 
@@ -304,7 +328,61 @@ function createTray(): void {
 }
 
 function registerIpcHandlers(): void {
+  ipcMain.handle(IPC_CHANNELS.getAuthState, async (): Promise<AuthState> => {
+    return authService.getState();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.registerAuth, async (_event, payload: unknown): Promise<AuthResult> => {
+    const normalizedPayload = normalizeAuthPayload(payload);
+
+    try {
+      await authService.register(normalizedPayload.email, normalizedPayload.password);
+      publishStatus("success", "Account aangemaakt. Je bent ingelogd.");
+      return {
+        ok: true,
+        message: "Account aangemaakt. Je bent ingelogd."
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Kon account niet aanmaken.";
+      logError("Auth register failed", error);
+      return {
+        ok: false,
+        message
+      };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.login, async (_event, payload: unknown): Promise<AuthResult> => {
+    const normalizedPayload = normalizeAuthPayload(payload);
+
+    try {
+      await authService.login(normalizedPayload.email, normalizedPayload.password);
+      publishStatus("success", "Inloggen gelukt.");
+      return {
+        ok: true,
+        message: "Inloggen gelukt."
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Inloggen mislukt.";
+      logError("Auth login failed", error);
+      return {
+        ok: false,
+        message
+      };
+    }
+  });
+
+  ipcMain.handle(IPC_CHANNELS.logout, (): { ok: boolean } => {
+    authService.logout();
+    publishStatus("info", "Uitgelogd.");
+    return { ok: true };
+  });
+
   ipcMain.handle(IPC_CHANNELS.getSettings, async () => {
+    if (!authService.isAuthenticated()) {
+      throw new Error("Je moet eerst inloggen.");
+    }
+
     const settings = settingsService.getSettings();
     const apiKey = await getApiKey();
 
@@ -317,10 +395,18 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.getCostStats, () => {
+    if (!authService.isAuthenticated()) {
+      throw new Error("Je moet eerst inloggen.");
+    }
+
     return costService.getSnapshot();
   });
 
   ipcMain.handle(IPC_CHANNELS.saveSettings, async (_event, payload: SettingsPayload) => {
+    if (!authService.isAuthenticated()) {
+      throw new Error("Je moet eerst inloggen.");
+    }
+
     const { apiKey, ...settingsPayload } = payload;
     const normalized = getNormalizedSettings(settingsPayload);
     settingsService.saveSettings(normalized);
@@ -336,6 +422,13 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.testApi, async (_event, payload: SettingsPayload): Promise<TestApiResult> => {
+    if (!authService.isAuthenticated()) {
+      return {
+        ok: false,
+        message: "Je moet eerst inloggen."
+      };
+    }
+
     const { apiKey: maybeApiKey, ...settingsPayload } = payload;
     const normalized = getNormalizedSettings(settingsPayload);
 
@@ -387,9 +480,19 @@ function registerIpcHandlers(): void {
     await triggerRewriteFlow();
   });
 
-  ipcMain.handle(IPC_CHANNELS.getPreviewData, () => currentPreviewContext);
+  ipcMain.handle(IPC_CHANNELS.getPreviewData, () => {
+    if (!authService.isAuthenticated()) {
+      throw new Error("Je moet eerst inloggen.");
+    }
+
+    return currentPreviewContext;
+  });
 
   ipcMain.handle(IPC_CHANNELS.previewCopy, async () => {
+    if (!authService.isAuthenticated()) {
+      throw new Error("Je moet eerst inloggen.");
+    }
+
     if (!currentPreviewContext) {
       return;
     }
@@ -399,6 +502,10 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.previewPaste, async () => {
+    if (!authService.isAuthenticated()) {
+      throw new Error("Je moet eerst inloggen.");
+    }
+
     if (!currentPreviewContext) {
       return;
     }
@@ -411,6 +518,10 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle(IPC_CHANNELS.previewCancel, async () => {
+    if (!authService.isAuthenticated()) {
+      throw new Error("Je moet eerst inloggen.");
+    }
+
     if (!currentPreviewContext) {
       previewWindow?.close();
       return;
@@ -433,11 +544,6 @@ async function bootstrap(): Promise<void> {
   registerHotkey(initialSettings.shortcut, false);
 
   showSettingsWindow();
-
-  const existingApiKey = await getApiKey();
-  if (existingApiKey) {
-    settingsWindow?.hide();
-  }
 
   app.on("activate", () => {
     showSettingsWindow();

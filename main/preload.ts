@@ -1,6 +1,9 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc";
 import type {
+  AuthPayload,
+  AuthResult,
+  AuthState,
   CostSnapshot,
   RewriteDebugPayload,
   RewriteRunContext,
@@ -17,6 +20,10 @@ export interface RendererSettingsState extends RewriteSettings {
 }
 
 const desktopApi = {
+  getAuthState: (): Promise<AuthState> => ipcRenderer.invoke(IPC_CHANNELS.getAuthState),
+  registerAuth: (payload: AuthPayload): Promise<AuthResult> => ipcRenderer.invoke(IPC_CHANNELS.registerAuth, payload),
+  login: (payload: AuthPayload): Promise<AuthResult> => ipcRenderer.invoke(IPC_CHANNELS.login, payload),
+  logout: (): Promise<{ ok: boolean }> => ipcRenderer.invoke(IPC_CHANNELS.logout),
   getSettings: (): Promise<RendererSettingsState> => ipcRenderer.invoke(IPC_CHANNELS.getSettings),
   getCostStats: (): Promise<CostSnapshot> => ipcRenderer.invoke(IPC_CHANNELS.getCostStats),
   saveSettings: (payload: SettingsPayload): Promise<{ ok: boolean }> =>

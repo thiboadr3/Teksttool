@@ -3,6 +3,7 @@ import type { RewriteSettings, StylePreset } from "./types";
 export const APP_NAME = "Tekstnakijken";
 export const KEYCHAIN_SERVICE = "Tekstnakijken";
 export const KEYCHAIN_ACCOUNT = "openai_api_key";
+export const KEYCHAIN_AUTH_ACCOUNT = "app_auth_credentials_v1";
 
 const RUNTIME_PLATFORM = typeof process !== "undefined" && typeof process.platform === "string" ? process.platform : "unknown";
 

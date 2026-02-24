@@ -1,4 +1,8 @@
 export const IPC_CHANNELS = {
+  getAuthState: "auth:get-state",
+  registerAuth: "auth:register",
+  login: "auth:login",
+  logout: "auth:logout",
   getSettings: "settings:get",
   saveSettings: "settings:save",
   testApi: "openai:test",

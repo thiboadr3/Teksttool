@@ -4,6 +4,7 @@ Cross-platform desktop app (Electron + React + TypeScript) die geselecteerde tek
 
 ## Features (MVP)
 
+- Verplichte login voor toegang tot settings/rewrite/API key
 - Globale hotkey rewrite flow (aanpasbaar in Settings)
 - Default Windows/Linux: `Ctrl + Alt + R`
 - Default macOS: `Cmd + Ctrl + R`

@@ -54,6 +54,22 @@ export interface TestApiResult {
   latencyMs?: number;
 }
 
+export interface AuthState {
+  initialized: boolean;
+  authenticated: boolean;
+  email: string | null;
+}
+
+export interface AuthPayload {
+  email: string;
+  password: string;
+}
+
+export interface AuthResult {
+  ok: boolean;
+  message: string;
+}
+
 export interface RewriteRunContext {
   sourceText: string;
   improvedText: string;
