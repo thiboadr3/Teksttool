@@ -1,6 +1,6 @@
 {
   "name": "tekstnakijken",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "Minimal desktop rewrite assistant with global hotkey and OpenAI",
   "main": "dist-electron/main.js",
   "type": "module",
